@@ -4,10 +4,16 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <iterator>
 #include <chrono>
 
-//todo: remove using namespace for increasing speed
-using namespace std;
+void copyArray(int size, int* source, int* destination)
+{
+	for (int i = 0; i < size; i++)
+	{
+		destination[i] = source[i];
+	}
+}
 
 int chooseVariable(int n, double* rate, short* assigned)
 {
@@ -24,23 +30,7 @@ int chooseVariable(int n, double* rate, short* assigned)
 	return imax;
 }
 
-void calculateRateAllTest(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate)
-{
-	for (int i = 0; i < n; i++)
-	{
-		double v = 1;
-		bool canTake = true;
-		for (int j = 0; j < m; j++)
-		{
-		
-			v += r[j][i];
-			
-		}
-		rate[i] = p[i] / v;
-	}
-}
-
-void calculateRateAll(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate)
+void calculateRate(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate)
 {
 	for (int i = 0; i < n; i++)
 	{
@@ -61,7 +51,7 @@ void calculateRateAll(int n, int m, int* p, int** r, int* b, int* used, short* a
 	}
 }
 
-void calculateRateAllWeighted(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate, double* weight)
+void calculateRateNorm(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate)
 {
 	for (int i = 0; i < n; i++)
 	{
@@ -71,138 +61,165 @@ void calculateRateAllWeighted(int n, int m, int* p, int** r, int* b, int* used, 
 		{
 			if (b[j] - used[j] - r[j][i] >= 0)
 			{
-				v += r[j][i] * weight[j] / (double(b[j]) - double(used[j]));
+				double size = r[j][i] * 1.0 / (double(b[j]) - double(used[j]));
+				v += pow(size, 2);
 			}
 			else
 			{
 				canTake = false;
 			}
 		}
-		rate[i] = canTake ? (p[i] / v) : 0;
+		rate[i] = canTake ? (p[i] / sqrt(v)) : 0;
 	}
 }
 
-void calculateWeight(int m, double* weight, int* demand, int* b)
+std::ifstream openFile(int argc, char* argv[])
 {
-	for (int i = 0; i < m; i++)
-	{
-		if (demand[i] <= b[i])
-		{
-			weight[i] = 0;
-		}
-		else
-		{
-			weight[i] = demand[i] * 1.0 / b[i];
-		}
-	}
-}
-
-void calculateRateTopK(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate, int k)
-{
-	double* values = new double[m];
-	for (int i = 0; i < n; i++)
-	{
-		double v = 0;
-		for (int j = 0; j < m; j++)
-		{
-			values[j] = r[j][i] * 1.0 / (double(b[j]) - double(used[j]));
-		}
-		sort(values, values + m);
-		for (int j = 0; j < k; j++)
-		{
-			v += values[j];
-		}
-
-		rate[i] = p[i] / v;
-	}
-}
-
-void updatePossible(int n, int m, int** r, short* possible, short* assigned, int* used, int* b)
-{
-	for (int i = 0; i < n; i++)
-	{
-		if (possible[i] && !assigned[i])
-		{
-			short p = 1;
-			for (int j = 0; j < m; j++)
-			{
-				if (b[j] < used[j] + r[j][i])
-				{
-					p = 0;
-					break;
-				}
-			}
-			possible[i] = p;
-		}
-		else
-		{
-			possible[i] = 0;
-		}
-	}
-}
-
-void calculateRateArticle(int n, int m, int* p, int** r, int* b, int* used, int* demand, short* assigned, double* rate, short* possible)
-{
-	updatePossible(n, m, r, possible, assigned, used, b);
-	for (int j = 0; j < m; j++)
-	{
-		demand[j] = 0;
-		for (int i = 0; i < n; i++)
-		{
-			demand[j] += possible[i] * r[j][i];
-		}
-		cout << demand[j] << '(' << b[j] - used[j] << ")\t";
-	}
-	cout << '\n';
-	for (int i = 0; i < n; i++)
-	{
-		double v = 0;
-		for (int j = 0; j < m; j++)
-		{
-			int consump = used[j] + r[j][i];
-			int remaining = b[j] - used[j] - r[j][i];
-			int dem = demand[j] - r[j][i];
-			v += consump * 1.0 * dem / double(remaining);
-
-			//v += r[j][i] * 1.0 * demand[j] - 1.0 * b[j];
-		}
-		rate[i] = p[i] / v;
-	}
-}
-
-int main(int argc, char* argv[])
-{
-	//check input
 	if (argc < 2)
 	{
-		cout << "Error. No file specified.\n";
-		return 1;
+		std::cout << "Error. No file specified.\n";
+		exit(1);
 	}
 
-	ifstream fin;
+	std::ifstream fin;
 	fin.open(argv[1]);
 
 	if (!fin)
 	{
-		cout << "Unable to open " << argv[1] << '\n';
-		return 1;
+		std::cout << "Unable to open " << argv[1] << '\n';
+		exit(1);
 	}
 
-	//start init
-	int n, m, q, opt;
-	int* p, * b, * x, * used;
-	int** r;
+	return fin;
+}
 
-	fin >> n >> m >> q >> opt;
+bool checkPossibility(int j, int m, int* used, int** r, int* b)
+{
+	bool canTake = true;
+	for (int i = 0; i < m; i++)
+	{
+		if (used[i] + r[i][j] > b[i])
+		{
+			canTake = false;
+			break;
+		}
+	}
 
+	return canTake;
+}
 
-	p = new int[n];
+void assignValue(int j, bool canTake, int m, int& nassigned, short* assigned, int* x, int* used, int** r)
+{
+	assigned[j] = 1;
+	nassigned++;
+	if (canTake)
+	{
+		x[j] = 1;
+		for (int i = 0; i < m; i++)
+		{
+			used[i] += r[i][j];
+		}
+	}
+	else
+	{
+		x[j] = 0;
+	}
+}
+
+void initSolution(int n, int m, short* assigned, int* used)
+{
+	for (int i = 0; i < n; i++)
+	{
+		assigned[i] = 0;
+	}
+
+	for (int i = 0; i < m; i++)
+	{
+		used[i] = 0;
+	}
+}
+
+void solveConstruction(int n, int m, int* x, int* b, int* p, int** r, void calculateRate(int, int, int*, int**, int*, int*, short*, double*))
+{
+	short* assigned = new short[n]; //1 if we already assigned value for a variable
+	int* used = new int[m]; //amount of used space in every dimension
+	double* rate = new double[n];//rate used to choose variable
+	int nassigned = 0; //number of assigned variables
+	initSolution(n, m, assigned, used);
+
+	//start algo
+	while (nassigned < n)
+	{
+		calculateRate(n, m, p, r, b, used, assigned, rate);
+		int j = chooseVariable(n, rate, assigned);
+		bool canTake = checkPossibility(j, m, used, r, b);
+		assignValue(j, canTake, m, nassigned, assigned, x, used, r);	
+	}
+}
+
+int getCost(int n, int* x, int* p)
+{
+	int s = 0;
+	for (int i = 0; i < n; i++)
+	{
+		s += x[i] * p[i];
+	}
+
+	return s;
+}
+
+int* chooseBestSolution(int n, int m, int* x, int* b, int* p, int** r)
+{
+	int* solution1 = new int[n]; //solution using sum as weight
+	solveConstruction(n, m, solution1, b, p, r, calculateRate);
+
+	int* solution2 = new int[n]; //solution using sqrt from sum of squares as weight
+	solveConstruction(n, m, solution2, b, p, r, calculateRateNorm);
+
+	if (getCost(n, solution1, p) > getCost(n, solution2, p))
+	{
+		delete[] solution2;
+		return solution1;
+	}
+	else
+	{
+		delete[] solution1;
+		return solution2;
+	}
+}
+
+double solveConstructionWithTime(int n, int m, int* x, int* b, int* p, int** r)
+{
+	// returns execution time in milliseconds
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	int* solution = chooseBestSolution(n, m, x, b, p, r);
+	copyArray(n, solution, x);
+	delete[] solution;
+
+	auto stop = std::chrono::high_resolution_clock::now();
+
+	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+	return microseconds * 1.0 / 1000;
+}
+
+void printSolution(int n, int* x)
+{
+	for (int i = 0; i < n; i++)
+	{
+		std::cout << x[i] << ' ';
+	}
+}
+
+void initInput(std::ifstream& fin,int n, int m, int* p, int** r, int* b)
+{
 	for (int i = 0; i < n; i++)
 	{
 		fin >> p[i];
 	}
 
-	r = new int* [m];
+
 	for (int i = 0; i < m; i++)
 	{
 		r[i] = new int[n];
@@ -212,106 +229,35 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	b = new int[m];
+
 	for (int i = 0; i < m; i++)
 	{
 		fin >> b[i];
 	}
+}
 
-	//end init
-	auto start = chrono::high_resolution_clock::now();
+int main(int argc, char* argv[])
+{
+	auto fin = openFile(argc, argv);
 
-	short* assigned = new short[n];
-	for (int i = 0; i < n; i++)
-	{
-		assigned[i] = 0;
-	}
-	x = new int[n];
-	used = new int[m];
-	for (int i = 0; i < m; i++)
-	{
-		used[i] = 0;
-	}
+	//start init
+	int n, m, q, opt;
+	int* p, * b, * x;
+	int** r;
 
-	//create rate
-	double* rate = new double[n];
-	/*
-	for (int i = 0; i < n; i++)
-	{
-		double v = 1;
-		for (int j = 0; j < m; j++)
-		{
-			v += r[j][i];
-		}
-		rate[i] = p[i] / v;
-	}*/
+	fin >> n >> m >> q >> opt;
 
-	//start algo
+	p = new int[n];
+	r = new int* [m];
+	b = new int[m];
 
-	int nassigned = 0;
+	initInput(fin, n, m, p, r, b);
 
-	int* demand = new int[m];
-	for (int i = 0; i < m; i++)
-	{
-		demand[i] = 0;
-		for (int j = 0; j < n; j++)
-		{
-			demand[i] += r[i][j];
-		}
-	}
+	x = new int[n]; //solution
+	double duration = solveConstructionWithTime(n, m, x, b, p, r);
 
-	short* possible = new short[n];
-	for (int i = 0; i < n; i++)
-	{
-		possible[i] = 1;
-	}
+	int s = getCost(n, x, p);
 
-	double* weight = new double[m];
-	calculateWeight(m, weight, demand, b);
-
-	while (nassigned < n)
-	{
-		calculateRateAll(n, m, p, r, b, used, assigned, rate);
-		//calculateRateAllTest(n, m, p, r, b, used, assigned, rate);
-		//calculateRateTopK(n, m, p, r, b, used, assigned, rate, 5);
-		//calculateRateArticle(n, m, p, r, b, used, demand, assigned, rate, possible);
-		//calculateRateAllWeighted(n, m, p, r, b, used, assigned, rate, weight);
-		int j = chooseVariable(n, rate, assigned);
-		bool canTake = true;
-		for (int i = 0; i < m; i++)
-		{
-			if (used[i] + r[i][j] > b[i])
-			{
-				canTake = false;
-				break;
-			}
-		}
-		assigned[j] = 1;
-		nassigned++;
-		if (canTake)
-		{
-			x[j] = 1;
-			for (int i = 0; i < m; i++)
-			{
-				used[i] += r[i][j];
-				//demand[i] -= r[i][j];
-			}
-		}
-		else
-		{
-			x[j] = 0;
-		}
-	}
-
-	auto stop = chrono::high_resolution_clock::now();
-
-	int s = 0;
-	for (int i = 0; i < n; i++)
-	{
-		//cout << x[i] << ' ';
-		s += x[i] * p[i];
-	}
-
-	auto duration = chrono::duration_cast<chrono::microseconds>(stop - start);
-    std::cout << s << "\t" << duration.count() * 1.0 / 1000 << " milliseconds\n";
+	//printSolution(n, x);
+    std::cout << s << "\t" << duration << " milliseconds\n";
 }
