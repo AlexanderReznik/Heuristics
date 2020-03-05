@@ -5,6 +5,8 @@
 #include <fstream>
 #include <algorithm>
 #include <iterator>
+#include <vector>
+#include <time.h>
 #include <chrono>
 
 void copyArray(int size, int* source, int* destination)
@@ -155,6 +157,10 @@ void solveConstruction(int n, int m, int* x, int* b, int* p, int** r, void calcu
 		bool canTake = checkPossibility(j, m, used, r, b);
 		assignValue(j, canTake, m, nassigned, assigned, x, used, r);	
 	}
+
+	delete[] assigned;
+	delete[] used;
+	delete[] rate;
 }
 
 int getCost(int n, int* x, int* p)
@@ -188,15 +194,52 @@ int* chooseBestSolution(int n, int m, int* x, int* b, int* p, int** r)
 	}
 }
 
-double solveConstructionWithTime(int n, int m, int* x, int* b, int* p, int** r)
+void solveConstructionBest(int n, int m, int* x, int* b, int* p, int** r)
+{
+	int* solution = chooseBestSolution(n, m, x, b, p, r);
+	copyArray(n, solution, x);
+	delete[] solution;
+}
+
+std::vector<int> getRandomPermutation(int n)
+{
+	std::vector<int> variables;
+	for (int i = 0; i < n; i++)
+	{
+		variables.push_back(i);
+	}
+	std::random_shuffle(variables.begin(), variables.end());
+
+	return variables;
+}
+
+void solveConstructionRandom(int n, int m, int* x, int* b, int* p, int** r)
+{
+	short* assigned = new short[n]; //1 if we already assigned value for a variable
+	int* used = new int[m]; //amount of used space in every dimension
+	int nassigned = 0; //number of assigned variables
+	initSolution(n, m, assigned, used);
+
+	std::vector<int> variables = getRandomPermutation(n);
+
+	for (int i = 0; i < n; i++)
+	{
+		int j = variables[i];
+		bool canTake = checkPossibility(j, m, used, r, b);
+		assignValue(j, canTake, m, nassigned, assigned, x, used, r);
+	}
+
+	delete[] assigned;
+	delete[] used;
+}
+
+double solveConstructionBestWithTime(int n, int m, int* x, int* b, int* p, int** r)
 {
 	// returns execution time in milliseconds
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	int* solution = chooseBestSolution(n, m, x, b, p, r);
-	copyArray(n, solution, x);
-	delete[] solution;
+	solveConstructionBest(n, m, x, b, p, r);
 
 	auto stop = std::chrono::high_resolution_clock::now();
 
@@ -238,6 +281,7 @@ void initInput(std::ifstream& fin,int n, int m, int* p, int** r, int* b)
 
 int main(int argc, char* argv[])
 {
+	srand(time(0));
 	auto fin = openFile(argc, argv);
 
 	//start init
@@ -254,7 +298,9 @@ int main(int argc, char* argv[])
 	initInput(fin, n, m, p, r, b);
 
 	x = new int[n]; //solution
-	double duration = solveConstructionWithTime(n, m, x, b, p, r);
+	double duration = 0;
+	//duration = solveConstructionBestWithTime(n, m, x, b, p, r);
+	solveConstructionRandom(n, m, x, b, p, r);
 
 	int s = getCost(n, x, p);
 
