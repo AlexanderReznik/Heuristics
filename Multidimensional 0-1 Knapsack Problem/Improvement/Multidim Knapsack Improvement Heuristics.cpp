@@ -32,6 +32,27 @@ int chooseVariable(int n, double* rate, short* assigned)
 	return imax;
 }
 
+void calculateRateEasy(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate)
+{
+	for (int i = 0; i < n; i++)
+	{
+		double v = 0;
+		bool canTake = true;
+		for (int j = 0; j < m; j++)
+		{
+			if (b[j] - used[j] - r[j][i] >= 0)
+			{
+				v += r[j][i] * 1.0 / (double(b[j]));
+			}
+			else
+			{
+				canTake = false;
+			}
+		}
+		rate[i] = canTake ? (p[i] / v) : 0;
+	}
+}
+
 void calculateRate(int n, int m, int* p, int** r, int* b, int* used, short* assigned, double* rate)
 {
 	for (int i = 0; i < n; i++)
@@ -260,13 +281,68 @@ void initImprovement(int n, int m, int* x, int* used, int** r)
 
 }
 
-void solveImprovement(int n, int m, int* x, int* b, int* p, int** r)
+void solveImprovement1(int n, int m, int* x, int* b, int* p, int** r)
 {
+	//1-flip
+
 	int* used = new int[m]; //amount of used space in every dimension
 	initImprovement(n, m, x, used, r);
 	int currentCost = getCost(n, x, p);
 	int bestImprovementCost;
-	int swap1, swap2;
+
+	while (true)
+	{
+		bestImprovementCost = currentCost;
+		int swap1 = -1;
+		for (int c1 = 0; c1 < n; c1++)
+		{	
+			bool possible = true;
+			for (int i = 0; i < m; i++)
+			{
+				int dif = (!x[c1] - x[c1]) * r[i][c1];
+				if (used[i] + dif > b[i])
+				{
+					possible = false;
+					break;
+				}
+			}
+			if (possible)
+			{
+				int dif = (!x[c1] - x[c1]) * p[c1];
+				if (currentCost + dif > bestImprovementCost)
+				{
+					bestImprovementCost = currentCost + dif;
+					swap1 = c1;
+				}
+			}
+		}
+		if (bestImprovementCost > currentCost)
+		{
+			for (int i = 0; i < m; i++)
+			{
+				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1];
+				used[i] += constraintDif;
+			}
+			x[swap1] = !x[swap1];
+			currentCost = bestImprovementCost;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	delete[] used;
+}
+
+void solveImprovement2(int n, int m, int* x, int* b, int* p, int** r)
+{
+	//2-flip
+
+	int* used = new int[m]; //amount of used space in every dimension
+	initImprovement(n, m, x, used, r);
+	int currentCost = getCost(n, x, p);
+	int bestImprovementCost;
 
 	while (true)
 	{
@@ -294,17 +370,17 @@ void solveImprovement(int n, int m, int* x, int* b, int* p, int** r)
 						bestImprovementCost = currentCost + dif;
 						swap1 = c1;
 						swap2 = c2;
-						for (int i = 0; i < m; i++)
-						{
-							int constraintDif = (!x[c1] - x[c1]) * r[i][c1] + (!x[c2] - x[c2]) * r[i][c2];
-							used[i] += constraintDif;
-						}
 					}
 				}
 			}
 		}
 		if (bestImprovementCost > currentCost)
 		{
+			for (int i = 0; i < m; i++)
+			{
+				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2];
+				used[i] += constraintDif;
+			}
 			x[swap1] = !x[swap1];
 			x[swap2] = !x[swap2];
 			currentCost = bestImprovementCost;
@@ -315,8 +391,138 @@ void solveImprovement(int n, int m, int* x, int* b, int* p, int** r)
 		}
 	}
 	
+	delete[] used;
+}
 
-	
+void solveImprovement3(int n, int m, int* x, int* b, int* p, int** r)
+{
+	//3-flip
+
+	int* used = new int[m]; //amount of used space in every dimension
+	initImprovement(n, m, x, used, r);
+	int currentCost = getCost(n, x, p);
+	int bestImprovementCost;
+
+	while (true)
+	{
+		bestImprovementCost = currentCost;
+		int swap1 = -1, swap2 = -1, swap3 = -1;
+		for (int c1 = 0; c1 < n; c1++)
+		{
+			for (int c2 = c1 + 1; c2 < n; c2++)
+			{
+				for (int c3 = c2 + 1; c3 < n; c3++)
+				{
+					bool possible = true;
+					for (int i = 0; i < m; i++)
+					{
+						int dif = (!x[c1] - x[c1]) * r[i][c1] + (!x[c2] - x[c2]) * r[i][c2] + (!x[c3] - x[c3]) * r[i][c3];
+						if (used[i] + dif > b[i])
+						{
+							possible = false;
+							break;
+						}
+					}
+					if (possible)
+					{
+						int dif = (!x[c1] - x[c1]) * p[c1] + (!x[c2] - x[c2]) * p[c2] + (!x[c3] - x[c3]) * p[c3];
+						if (currentCost + dif > bestImprovementCost)
+						{
+							bestImprovementCost = currentCost + dif;
+							swap1 = c1;
+							swap2 = c2;
+							swap3 = c3;
+						}
+					}
+				}
+			}
+		}
+		if (bestImprovementCost > currentCost)
+		{
+			for (int i = 0; i < m; i++)
+			{
+				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2] + (!x[swap3] - x[swap3]) * r[i][swap3];
+				used[i] += constraintDif;
+			}
+			x[swap1] = !x[swap1];
+			x[swap2] = !x[swap2];
+			x[swap3] = !x[swap3];
+			currentCost = bestImprovementCost;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	delete[] used;
+}
+
+void solveImprovement4(int n, int m, int* x, int* b, int* p, int** r)
+{
+	//4-flip
+
+	int* used = new int[m]; //amount of used space in every dimension
+	initImprovement(n, m, x, used, r);
+	int currentCost = getCost(n, x, p);
+	int bestImprovementCost;
+
+	while (true)
+	{
+		bestImprovementCost = currentCost;
+		int swap1 = -1, swap2 = -1, swap3 = -1, swap4 = -1;
+		for (int c1 = 0; c1 < n; c1++)
+		{
+			for (int c2 = c1 + 1; c2 < n; c2++)
+			{
+				for (int c3 = c2 + 1; c3 < n; c3++)
+				{
+					for (int c4 = c3 + 1; c4 < n; c4++)
+					{
+						bool possible = true;
+						for (int i = 0; i < m; i++)
+						{
+							int dif = (!x[c1] - x[c1]) * r[i][c1] + (!x[c2] - x[c2]) * r[i][c2] + (!x[c3] - x[c3]) * r[i][c3] + (!x[c4] - x[c4]) * r[i][c4];
+							if (used[i] + dif > b[i])
+							{
+								possible = false;
+								break;
+							}
+						}
+						if (possible)
+						{
+							int dif = (!x[c1] - x[c1]) * p[c1] + (!x[c2] - x[c2]) * p[c2] + (!x[c3] - x[c3]) * p[c3] + (!x[c4] - x[c4]) * p[c4];
+							if (currentCost + dif > bestImprovementCost)
+							{
+								bestImprovementCost = currentCost + dif;
+								swap1 = c1;
+								swap2 = c2;
+								swap3 = c3;
+								swap4 = c4;
+							}
+						}
+					}
+				}
+			}
+		}
+		if (bestImprovementCost > currentCost)
+		{
+			for (int i = 0; i < m; i++)
+			{
+				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2] + (!x[swap3] - x[swap3]) * r[i][swap3] + (!x[swap4] - x[swap4]) * r[i][swap4];
+				used[i] += constraintDif;
+			}
+			x[swap1] = !x[swap1];
+			x[swap2] = !x[swap2];
+			x[swap3] = !x[swap3];
+			x[swap4] = !x[swap4];
+			currentCost = bestImprovementCost;
+		}
+		else
+		{
+			break;
+		}
+	}
 
 	delete[] used;
 }
@@ -353,6 +559,21 @@ void initInput(std::ifstream& fin,int n, int m, int* p, int** r, int* b)
 	}
 }
 
+bool isFeasible(int n, int m, int* x, int** r, int* b)
+{
+	bool feasible = true;
+	for (int i = 0; i < m; i++)
+	{
+		int u = 0;
+		for (int j = 0; j < n; j++)
+		{
+			u += r[i][j] * x[j];
+		}
+		feasible &= (b[i] >= u);
+	}
+	return feasible;
+}
+
 int main(int argc, char* argv[])
 {
 	srand(time(0));
@@ -374,13 +595,23 @@ int main(int argc, char* argv[])
 	x = new int[n]; //solution
 	double duration = 0;
 	//duration = solveConstructionBestWithTime(n, m, x, b, p, r);
-	solveConstructionRandom(n, m, x, b, p, r);
-	std::cout << "before improvenemt cost: " << getCost(n, x, p) << '\n';
+	solveConstruction(n, m, x, b, p, r, calculateRateEasy);
+	//std::cout << "before improvenemt cost: " << getCost(n, x, p) << '\n';
 
-	solveImprovement(n, m, x, b, p, r);
+	if (n <= 300)
+	{
+		solveImprovement4(n, m, x, b, p, r);
+	}
+	solveImprovement3(n, m, x, b, p, r);
+	solveImprovement2(n, m, x, b, p, r);
+	solveImprovement1(n, m, x, b, p, r);
+
 
 	int s = getCost(n, x, p);
 
+	//std::cout << isFeasible(n,m,x,r,b) << "\n";
+
 	//printSolution(n, x);
-    std::cout << s << "\t" << duration << " milliseconds\n";
+    //std::cout << s << "\t" << duration << " milliseconds\n";
+	std::cout << s << '\n';
 }
