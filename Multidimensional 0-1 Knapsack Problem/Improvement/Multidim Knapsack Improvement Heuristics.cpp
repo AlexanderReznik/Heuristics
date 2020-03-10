@@ -17,6 +17,21 @@ void copyArray(int size, int* source, int* destination)
 	}
 }
 
+bool isFeasible(int n, int m, int* x, int** r, int* b)
+{
+	bool feasible = true;
+	for (int i = 0; i < m; i++)
+	{
+		int u = 0;
+		for (int j = 0; j < n; j++)
+		{
+			u += r[i][j] * x[j];
+		}
+		feasible &= (b[i] >= u);
+	}
+	return feasible;
+}
+
 int chooseVariable(int n, double* rate, short* assigned)
 {
 	double max = -DBL_MAX;
@@ -195,7 +210,7 @@ int getCost(int n, int* x, int* p)
 	return s;
 }
 
-int* chooseBestSolution(int n, int m, int* x, int* b, int* p, int** r)
+int* chooseBestConstruction(int n, int m, int* b, int* p, int** r)
 {
 	int* solution1 = new int[n]; //solution using sum as weight
 	solveConstruction(n, m, solution1, b, p, r, calculateRate);
@@ -217,7 +232,7 @@ int* chooseBestSolution(int n, int m, int* x, int* b, int* p, int** r)
 
 void solveConstructionBest(int n, int m, int* x, int* b, int* p, int** r)
 {
-	int* solution = chooseBestSolution(n, m, x, b, p, r);
+	int* solution = chooseBestConstruction(n, m, b, p, r);
 	copyArray(n, solution, x);
 	delete[] solution;
 }
@@ -254,20 +269,6 @@ void solveConstructionRandom(int n, int m, int* x, int* b, int* p, int** r)
 	delete[] used;
 }
 
-double solveConstructionBestWithTime(int n, int m, int* x, int* b, int* p, int** r)
-{
-	// returns execution time in milliseconds
-
-	auto start = std::chrono::high_resolution_clock::now();
-
-	solveConstructionBest(n, m, x, b, p, r);
-
-	auto stop = std::chrono::high_resolution_clock::now();
-
-	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
-	return microseconds * 1.0 / 1000;
-}
-
 void initImprovement(int n, int m, int* x, int* used, int** r)
 {
 	for (int i = 0; i < m; i++)
@@ -281,7 +282,7 @@ void initImprovement(int n, int m, int* x, int* used, int** r)
 
 }
 
-void solveImprovement1(int n, int m, int* x, int* b, int* p, int** r)
+void solveImprovementFlip1(int n, int m, int* x, int* b, int* p, int** r, bool mock)
 {
 	//1-flip
 
@@ -335,22 +336,15 @@ void solveImprovement1(int n, int m, int* x, int* b, int* p, int** r)
 	delete[] used;
 }
 
-void solveImprovement2(int n, int m, int* x, int* b, int* p, int** r)
+
+
+void findImprovement2(int n, int m, int* x, int** r, int* used, int* b, int* p, int& currentCost, int& bestImprovementCost, int& swap1, int& swap2)
 {
-	//2-flip
-
-	int* used = new int[m]; //amount of used space in every dimension
-	initImprovement(n, m, x, used, r);
-	int currentCost = getCost(n, x, p);
-	int bestImprovementCost;
-
-	while (true)
+	for (int c1 = 0; c1 < n; c1++)
 	{
-		bestImprovementCost = currentCost;
-		int swap1 = -1, swap2 = -1;
-		for (int c1 = 0; c1 < n; c1++)
+		for (int c2 = c1 + 1; c2 < n; c2++)
 		{
-			for (int c2 = c1 + 1; c2 < n; c2++)
+			if (x[c1] + x[c2] == 1)
 			{
 				bool possible = true;
 				for (int i = 0; i < m; i++)
@@ -374,44 +368,85 @@ void solveImprovement2(int n, int m, int* x, int* b, int* p, int** r)
 				}
 			}
 		}
-		if (bestImprovementCost > currentCost)
-		{
-			for (int i = 0; i < m; i++)
-			{
-				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2];
-				used[i] += constraintDif;
-			}
-			x[swap1] = !x[swap1];
-			x[swap2] = !x[swap2];
-			currentCost = bestImprovementCost;
-		}
-		else
-		{
-			break;
-		}
 	}
-	
-	delete[] used;
 }
 
-void solveImprovement3(int n, int m, int* x, int* b, int* p, int** r)
+void returnToBest2(int* x, int* p, int& swap1, int& swap2)
 {
-	//3-flip
+	// if there was at least one swap and previous solution is better than current (all solutions in search are feasible)
+	// than go back to previous
+	if (swap1 != -1 && p[swap1] * x[swap1] + p[swap2] * x[swap2] < p[swap1] * !x[swap1] + p[swap2] * !x[swap2])
+	{
+		x[swap1] = !x[swap1];
+		x[swap2] = !x[swap2];
+	}
+}
+
+bool makeMove2(int n, int m, int* x, int** r, int* used, int& currentCost, int& bestImprovementCost, int& previousCost, int& swap1, int& swap2, bool jagged)
+{
+	if (bestImprovementCost <= (jagged ? previousCost : currentCost))
+	{
+		return false;
+	}
+
+	for (int i = 0; i < m; i++)
+	{
+		int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2];
+		used[i] += constraintDif;
+	}
+	x[swap1] = !x[swap1];
+	x[swap2] = !x[swap2];
+	if (jagged)
+	{
+		previousCost = currentCost;
+	}
+	currentCost = bestImprovementCost;
+
+	return true;
+}
+
+void solveImprovementFlip2(int n, int m, int* x, int* b, int* p, int** r, bool jagged)
+{
+	//2-flip
 
 	int* used = new int[m]; //amount of used space in every dimension
 	initImprovement(n, m, x, used, r);
 	int currentCost = getCost(n, x, p);
-	int bestImprovementCost;
+	int bestImprovementCost, previousCost = currentCost;
+	int swap1, swap2;
 
 	while (true)
 	{
-		bestImprovementCost = currentCost;
-		int swap1 = -1, swap2 = -1, swap3 = -1;
-		for (int c1 = 0; c1 < n; c1++)
+		bestImprovementCost = 0;
+		swap1 = -1;
+		swap2 = -1;
+		findImprovement2(n, m, x, r, used, b, p, currentCost, bestImprovementCost, swap1, swap2);
+		bool moved = makeMove2(n, m, x, r, used, currentCost, bestImprovementCost, previousCost, swap1, swap2, jagged);
+		if (!moved)
 		{
-			for (int c2 = c1 + 1; c2 < n; c2++)
+			break;
+		}
+	}
+
+	if (jagged)
+	{
+		returnToBest2(x, p, swap1, swap2);
+	}
+
+	delete[] used;
+}
+
+
+void findImprovement3(int n, int m, int* x, int** r, int* used, int* b, int* p, int& currentCost, int& bestImprovementCost, int& swap1, int& swap2, int& swap3)
+{
+	for (int c1 = 0; c1 < n; c1++)
+	{
+		for (int c2 = c1 + 1; c2 < n; c2++)
+		{
+			for (int c3 = c2 + 1; c3 < n; c3++)
 			{
-				for (int c3 = c2 + 1; c3 < n; c3++)
+				int sum = x[c1] + x[c2] + x[c3];
+				if (sum > 0 && sum < 3)
 				{
 					bool possible = true;
 					for (int i = 0; i < m; i++)
@@ -437,47 +472,90 @@ void solveImprovement3(int n, int m, int* x, int* b, int* p, int** r)
 				}
 			}
 		}
-		if (bestImprovementCost > currentCost)
-		{
-			for (int i = 0; i < m; i++)
-			{
-				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2] + (!x[swap3] - x[swap3]) * r[i][swap3];
-				used[i] += constraintDif;
-			}
-			x[swap1] = !x[swap1];
-			x[swap2] = !x[swap2];
-			x[swap3] = !x[swap3];
-			currentCost = bestImprovementCost;
-		}
-		else
+	}
+}
+
+void returnToBest3(int* x, int* p, int& swap1, int& swap2, int& swap3)
+{
+	// if there was at least one swap and previous solution is better than current (all solutions in search are feasible)
+	// than go back to previous
+	if (swap1 != -1 && p[swap1] * x[swap1] + p[swap2] * x[swap2] + p[swap3] * x[swap3] < p[swap1] * !x[swap1] + p[swap2] * !x[swap2] + p[swap3] * !x[swap3])
+	{
+		x[swap1] = !x[swap1];
+		x[swap2] = !x[swap2];
+		x[swap3] = !x[swap3];
+	}
+}
+
+bool makeMove3(int n, int m, int* x, int** r, int* used, int& currentCost, int& bestImprovementCost, int& previousCost, int& swap1, int& swap2, int& swap3, bool jagged)
+{
+	if (bestImprovementCost <= (jagged ? previousCost : currentCost))
+	{
+		return false;
+	}
+
+	for (int i = 0; i < m; i++)
+	{
+		int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2] + (!x[swap3] - x[swap3]) * r[i][swap3];
+		used[i] += constraintDif;
+	}
+	x[swap1] = !x[swap1];
+	x[swap2] = !x[swap2];
+	x[swap3] = !x[swap3];
+	if (jagged)
+	{
+		previousCost = currentCost;
+	}
+	currentCost = bestImprovementCost;
+
+	return true;
+}
+
+void solveImprovementFlip3(int n, int m, int* x, int* b, int* p, int** r, bool jagged)
+{
+	//3-flip
+
+	int* used = new int[m]; //amount of used space in every dimension
+	initImprovement(n, m, x, used, r);
+	int currentCost = getCost(n, x, p);
+	int bestImprovementCost, previousCost = currentCost;
+	int swap1, swap2, swap3;
+
+	while (true)
+	{
+		bestImprovementCost = 0;
+		swap1 = -1;
+		swap2 = -1; 
+		swap3 = -1;
+		findImprovement3(n, m, x, r, used, b, p, currentCost, bestImprovementCost, swap1, swap2, swap3);
+		bool moved = makeMove3(n, m, x, r, used, currentCost, bestImprovementCost, previousCost, swap1, swap2, swap3, jagged);
+		if (!moved)
 		{
 			break;
 		}
 	}
 
+	if (jagged)
+	{
+		returnToBest3(x, p, swap1, swap2, swap3);
+	}
+
 	delete[] used;
 }
 
-void solveImprovement4(int n, int m, int* x, int* b, int* p, int** r)
+
+void findImprovement4(int n, int m, int* x, int** r, int* used, int* b, int* p, int& currentCost, int& bestImprovementCost, int& swap1, int& swap2, int& swap3, int& swap4 )
 {
-	//4-flip
-
-	int* used = new int[m]; //amount of used space in every dimension
-	initImprovement(n, m, x, used, r);
-	int currentCost = getCost(n, x, p);
-	int bestImprovementCost;
-
-	while (true)
+	for (int c1 = 0; c1 < n; c1++)
 	{
-		bestImprovementCost = currentCost;
-		int swap1 = -1, swap2 = -1, swap3 = -1, swap4 = -1;
-		for (int c1 = 0; c1 < n; c1++)
+		for (int c2 = c1 + 1; c2 < n; c2++)
 		{
-			for (int c2 = c1 + 1; c2 < n; c2++)
+			for (int c3 = c2 + 1; c3 < n; c3++)
 			{
-				for (int c3 = c2 + 1; c3 < n; c3++)
+				for (int c4 = c3 + 1; c4 < n; c4++)
 				{
-					for (int c4 = c3 + 1; c4 < n; c4++)
+					int sum = x[c1] + x[c2] + x[c3] + x[c4];
+					if (sum > 0 && sum < 4)
 					{
 						bool possible = true;
 						for (int i = 0; i < m; i++)
@@ -505,26 +583,107 @@ void solveImprovement4(int n, int m, int* x, int* b, int* p, int** r)
 				}
 			}
 		}
-		if (bestImprovementCost > currentCost)
-		{
-			for (int i = 0; i < m; i++)
-			{
-				int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2] + (!x[swap3] - x[swap3]) * r[i][swap3] + (!x[swap4] - x[swap4]) * r[i][swap4];
-				used[i] += constraintDif;
-			}
-			x[swap1] = !x[swap1];
-			x[swap2] = !x[swap2];
-			x[swap3] = !x[swap3];
-			x[swap4] = !x[swap4];
-			currentCost = bestImprovementCost;
-		}
-		else
+	}
+}
+
+void returnToBest4(int* x, int* p, int& swap1, int& swap2, int& swap3, int& swap4)
+{
+	// if there was at least one swap and previous solution is better than current (all solutions in search are feasible)
+	// than go back to previous
+	if (swap1 != -1 && p[swap1] * x[swap1] + p[swap2] * x[swap2] + p[swap3] * x[swap3] + p[swap4] * x[swap4] < p[swap1] * !x[swap1] + p[swap2] * !x[swap2] + p[swap3] * !x[swap3] + p[swap4] * !x[swap4])
+	{
+		x[swap1] = !x[swap1];
+		x[swap2] = !x[swap2];
+		x[swap3] = !x[swap3];
+		x[swap4] = !x[swap4];
+	}
+}
+
+bool makeMove4(int n, int m, int* x, int** r, int* used, int& currentCost, int& bestImprovementCost, int& previousCost, int& swap1, int& swap2, int& swap3, int& swap4, bool jagged)
+{
+	if (bestImprovementCost <= (jagged? previousCost : currentCost))
+	{
+		return false;
+	}
+	
+	for (int i = 0; i < m; i++)
+	{
+		int constraintDif = (!x[swap1] - x[swap1]) * r[i][swap1] + (!x[swap2] - x[swap2]) * r[i][swap2] + (!x[swap3] - x[swap3]) * r[i][swap3] + (!x[swap4] - x[swap4]) * r[i][swap4];
+		used[i] += constraintDif;
+	}
+	x[swap1] = !x[swap1];
+	x[swap2] = !x[swap2];
+	x[swap3] = !x[swap3];
+	x[swap4] = !x[swap4];
+	if (jagged)
+	{
+		previousCost = currentCost;
+	}
+	currentCost = bestImprovementCost;
+	
+	return true;
+}
+
+void solveImprovementFlip4(int n, int m, int* x, int* b, int* p, int** r, bool jagged)
+{
+	//4-flip
+
+	int* used = new int[m]; //amount of used space in every dimension
+	initImprovement(n, m, x, used, r);
+	int currentCost = getCost(n, x, p);
+	int bestImprovementCost, previousCost = currentCost;
+	int swap1, swap2, swap3, swap4;
+
+	while (true)
+	{
+		bestImprovementCost = 0;
+		swap1 = -1;
+		swap2 = -1;
+		swap3 = -1;
+		swap4 = -1;
+		findImprovement4(n, m, x, r, used, b, p, currentCost, bestImprovementCost, swap1, swap2, swap3, swap4);
+		bool moved = makeMove4(n, m, x, r, used, currentCost, bestImprovementCost, previousCost, swap1, swap2, swap3, swap4, jagged);
+		if(!moved)
 		{
 			break;
 		}
 	}
 
+	if (jagged)
+	{
+		returnToBest4(x, p, swap1, swap2, swap3, swap4);
+	}
+
 	delete[] used;
+}
+
+
+double solveConstructionBestWithTime(int n, int m, int* x, int* b, int* p, int** r)
+{
+	// returns execution time in milliseconds
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	solveConstructionBest(n, m, x, b, p, r);
+
+	auto stop = std::chrono::high_resolution_clock::now();
+
+	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+	return microseconds * 1.0 / 1000;
+}
+
+double solveImprovementWithTime(int n, int m, int* x, int* b, int* p, int** r, bool jagged, void solveImprovement(int, int, int*, int*, int*, int**, bool))
+{
+	// returns execution time in milliseconds
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	solveImprovement(n, m, x, b, p, r, jagged);
+
+	auto stop = std::chrono::high_resolution_clock::now();
+
+	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+	return microseconds * 1.0 / 1000;
 }
 
 void printSolution(int n, int* x)
@@ -559,21 +718,6 @@ void initInput(std::ifstream& fin,int n, int m, int* p, int** r, int* b)
 	}
 }
 
-bool isFeasible(int n, int m, int* x, int** r, int* b)
-{
-	bool feasible = true;
-	for (int i = 0; i < m; i++)
-	{
-		int u = 0;
-		for (int j = 0; j < n; j++)
-		{
-			u += r[i][j] * x[j];
-		}
-		feasible &= (b[i] >= u);
-	}
-	return feasible;
-}
-
 int main(int argc, char* argv[])
 {
 	srand(time(0));
@@ -592,26 +736,56 @@ int main(int argc, char* argv[])
 
 	initInput(fin, n, m, p, r, b);
 
+	auto start = std::chrono::high_resolution_clock::now();
+
 	x = new int[n]; //solution
 	double duration = 0;
 	//duration = solveConstructionBestWithTime(n, m, x, b, p, r);
 	solveConstruction(n, m, x, b, p, r, calculateRateEasy);
 	//std::cout << "before improvenemt cost: " << getCost(n, x, p) << '\n';
 
-	if (n <= 300)
+	solveConstruction(n, m, x, b, p, r, calculateRateEasy);
+	if (n <= 200)
 	{
-		solveImprovement4(n, m, x, b, p, r);
+		duration = +solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip4);
 	}
-	solveImprovement3(n, m, x, b, p, r);
-	solveImprovement2(n, m, x, b, p, r);
-	solveImprovement1(n, m, x, b, p, r);
-
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip3);
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip2);
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip1);
 
 	int s = getCost(n, x, p);
+
+	solveConstruction(n, m, x, b, p, r, calculateRate);
+	if (n <= 270)
+	{
+		duration = +solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip4);
+	}
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip3);
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip2);
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip1);
+
+
+	int s2 = getCost(n, x, p);
+
+	solveConstruction(n, m, x, b, p, r, calculateRateNorm);
+	if (n <= 270)
+	{
+		duration = +solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip4);
+	}
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip3);
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip2);
+	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip1);
+
+
+	int s3 = getCost(n, x, p);
 
 	//std::cout << isFeasible(n,m,x,r,b) << "\n";
 
 	//printSolution(n, x);
-    //std::cout << s << "\t" << duration << " milliseconds\n";
-	std::cout << s << '\n';
+
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+
+    std::cout << s << '\t' << s2 << '\t' << s3 << '\t' << microseconds * 1.0 /1000000 << " seconds\n";
+	//std::cout << s << '\n';
 }
