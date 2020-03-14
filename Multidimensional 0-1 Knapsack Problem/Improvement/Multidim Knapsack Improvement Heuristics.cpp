@@ -718,6 +718,129 @@ void initInput(std::ifstream& fin,int n, int m, int* p, int** r, int* b)
 	}
 }
 
+int* chooseBestSolution(std::vector<int*> solutions, int n, int* p)
+{
+	int bestIndex = -1;
+	int bestCost = -1;
+	for (int i = 0; i < solutions.size(); i++)
+	{
+		int cost = getCost(n, solutions[i], p);
+		if (cost > bestCost)
+		{
+			bestIndex = i;
+			bestCost = cost;
+		}
+	}
+	return solutions[bestIndex];
+}
+
+void solveBestImprovement(int n, int m, int* x, int* b, int* p, int** r)
+{
+	std::vector<int*> solutions;
+
+	int* solution1 = new int[n];
+	solveConstruction(n, m, solution1, b, p, r, calculateRateEasy);
+	if (n <= 200)
+	{
+		solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip4);
+	}
+	solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip3);
+	solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip2);
+	solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip1);
+	solutions.push_back(solution1);
+
+	int* solution2 = new int[n];
+	solveConstruction(n, m, solution2, b, p, r, calculateRate);
+	if (n <= 270)
+	{
+		solveImprovementWithTime(n, m, solution2, b, p, r, true, solveImprovementFlip4);
+	}
+	solveImprovementWithTime(n, m, solution2, b, p, r, true, solveImprovementFlip3);
+	solveImprovementWithTime(n, m, solution2, b, p, r, true, solveImprovementFlip2);
+	solveImprovementWithTime(n, m, solution2, b, p, r, true, solveImprovementFlip1);
+	solutions.push_back(solution2);
+
+	int* solution3 = new int[n];
+	solveConstruction(n, m, solution3, b, p, r, calculateRateNorm);
+	if (n <= 200)
+	{
+		solveImprovementWithTime(n, m, solution3, b, p, r, true, solveImprovementFlip4);
+	}
+	solveImprovementWithTime(n, m, solution3, b, p, r, true, solveImprovementFlip3);
+	solveImprovementWithTime(n, m, solution3, b, p, r, true, solveImprovementFlip2);
+	solveImprovementWithTime(n, m, solution3, b, p, r, true, solveImprovementFlip1);
+	solutions.push_back(solution3);
+
+	int* bestSolution = chooseBestSolution(solutions, n, p);
+	copyArray(n, bestSolution, x);
+
+	delete[] solution1;
+	delete[] solution2;
+	delete[] solution3;
+
+	//std::cout << isFeasible(n,m,x,r,b) << "\n";
+
+	//printSolution(n, x);
+}
+
+void solveQuickImprovement(int n, int m, int* x, int* b, int* p, int** r)
+{
+	std::vector<int*> solutions;
+
+	int* solution1 = new int[n];
+	solveConstruction(n, m, solution1, b, p, r, calculateRateEasy);
+	if (n <= 200)
+	{
+		solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip3);
+	}
+	solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip2);
+	solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip1);
+	solutions.push_back(solution1);
+
+	int* solution2 = new int[n];
+	solveConstruction(n, m, solution2, b, p, r, calculateRate);
+	if (n <= 200)
+	{
+		solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip3);
+	}
+	solveImprovementWithTime(n, m, solution2, b, p, r, true, solveImprovementFlip2);
+	solveImprovementWithTime(n, m, solution2, b, p, r, true, solveImprovementFlip1);
+	solutions.push_back(solution2);
+
+	int* solution3 = new int[n];
+	solveConstruction(n, m, solution3, b, p, r, calculateRateNorm);
+	if (n <= 200)
+	{
+		solveImprovementWithTime(n, m, solution1, b, p, r, true, solveImprovementFlip3);
+	}
+	solveImprovementWithTime(n, m, solution3, b, p, r, true, solveImprovementFlip2);
+	solveImprovementWithTime(n, m, solution3, b, p, r, true, solveImprovementFlip1);
+	solutions.push_back(solution3);
+
+	int* bestSolution = chooseBestSolution(solutions, n, p);
+	copyArray(n, bestSolution, x);
+
+	delete[] solution1;
+	delete[] solution2;
+	delete[] solution3;
+
+	//std::cout << isFeasible(n,m,x,r,b) << "\n";
+
+	//printSolution(n, x);
+}
+
+double solveBestImprovementWithTime(int n, int m, int* x, int* b, int* p, int** r, void solveImprovement(int, int, int*, int*, int*, int**))
+{
+	auto start = std::chrono::high_resolution_clock::now();
+
+	solveImprovement(n, m, x, b, p, r);
+
+	auto stop = std::chrono::high_resolution_clock::now();
+	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+
+	return microseconds;
+}
+
 int main(int argc, char* argv[])
 {
 	srand(time(0));
@@ -735,57 +858,10 @@ int main(int argc, char* argv[])
 	b = new int[m];
 
 	initInput(fin, n, m, p, r, b);
-
-	auto start = std::chrono::high_resolution_clock::now();
-
-	x = new int[n]; //solution
-	double duration = 0;
-	//duration = solveConstructionBestWithTime(n, m, x, b, p, r);
-	solveConstruction(n, m, x, b, p, r, calculateRateEasy);
-	//std::cout << "before improvenemt cost: " << getCost(n, x, p) << '\n';
-
-	solveConstruction(n, m, x, b, p, r, calculateRateEasy);
-	if (n <= 200)
-	{
-		duration = +solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip4);
-	}
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip3);
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip2);
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip1);
-
-	int s = getCost(n, x, p);
-
-	solveConstruction(n, m, x, b, p, r, calculateRate);
-	if (n <= 270)
-	{
-		duration = +solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip4);
-	}
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip3);
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip2);
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip1);
-
-
-	int s2 = getCost(n, x, p);
-
-	solveConstruction(n, m, x, b, p, r, calculateRateNorm);
-	if (n <= 270)
-	{
-		duration = +solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip4);
-	}
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip3);
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip2);
-	duration += solveImprovementWithTime(n, m, x, b, p, r, true, solveImprovementFlip1);
-
-
-	int s3 = getCost(n, x, p);
-
-	//std::cout << isFeasible(n,m,x,r,b) << "\n";
+	x = new int[n];
+	
+	double duration = solveBestImprovementWithTime(n, m, x, b, p, r, solveBestImprovement);
 
 	//printSolution(n, x);
-
-	auto stop = std::chrono::high_resolution_clock::now();
-	auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
-
-    std::cout << s << '\t' << s2 << '\t' << s3 << '\t' << microseconds * 1.0 /1000000 << " seconds\n";
-	//std::cout << s << '\n';
+    std::cout << getCost(n, x, p) << '\t' << duration * 1.0 /1000000 << " seconds\n";
 }
